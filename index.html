@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestão Escolar - Cantina e Alunos</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f1f5f9; }
+        .tab-active { border-bottom: 3px solid #3b82f6; color: #3b82f6; }
+        #reader { border: none !important; border-radius: 1.5rem; overflow: hidden; background-color: #f8fafc; width: 100% !important; }
+        #reader video { border-radius: 1rem !important; object-fit: cover !important; }
+        .animate-fade-in { animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <!-- Navegação -->
+    <header class="bg-white shadow-sm sticky top-0 z-40">
+        <div class="container mx-auto px-4">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center gap-2 text-blue-600 font-bold text-xl">
+                    <i class="fas fa-school"></i>
+                    <span>EduControl</span>
+                </div>
+                <nav class="flex gap-6 h-full text-sm md:text-base">
+                    <button onclick="attemptAccess('direcao')" id="tab-direcao" class="px-2 h-full flex items-center gap-2 font-medium text-slate-600 hover:text-blue-500 transition">
+                        <i class="fas fa-user-shield"></i> <span class="hidden md:inline">Direção</span>
+                    </button>
+                    <button onclick="attemptAccess('cantina')" id="tab-cantina" class="px-2 h-full flex items-center gap-2 font-medium text-slate-600 hover:text-blue-500 transition">
+                        <i class="fas fa-utensils"></i> <span class="hidden md:inline">Cantina</span>
+                    </button>
+                    <button onclick="switchTab('aluno')" id="tab-aluno" class="px-2 h-full flex items-center gap-2 font-medium text-slate-600 hover:text-blue-500 transition tab-active">
+                        <i class="fas fa-user-graduate"></i> <span class="hidden md:inline">Aluno</span>
+                    </button>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <main class="container mx-auto p-4 flex-grow">
+
+        <!-- Login / Auth -->
+        <section id="view-auth" class="hidden animate-fade-in">
+            <div class="max-w-md mx-auto mt-10 md:mt-20 bg-white p-8 rounded-3xl shadow-xl border border-slate-200 text-center">
+                <div class="w-16 h-16 bg-blue-100 text-blue-600 rounded-full mx-auto mb-4 flex items-center justify-center text-2xl">
+                    <i class="fas fa-lock"></i>
+                </div>
+                <h2 id="auth-title" class="text-2xl font-bold text-slate-800 mb-2">Acesso Restrito</h2>
+                <div class="space-y-4">
+                    <input type="password" id="authPassword" placeholder="Senha" class="w-full p-4 border rounded-2xl text-center text-xl tracking-widest outline-none focus:ring-2 focus:ring-blue-500">
+                    <button onclick="verifyPassword()" class="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold hover:bg-blue-700 transition">Entrar</button>
+                    <button onclick="switchTab('aluno')" class="text-slate-400 text-sm">Voltar</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Direção -->
+        <section id="view-direcao" class="hidden">
+            <div class="flex justify-between items-center mb-6">
+                <h1 class="text-2xl font-bold text-slate-800">Painel da Direção</h1>
+                <button onclick="logout()" class="text-sm bg-slate-200 px-4 py-2 rounded-lg font-bold">Sair</button>
+            </div>
+            <div class="grid lg:grid-cols-3 gap-6">
+                <div class="lg:col-span-1 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                    <h2 class="text-xl font-bold text-slate-800 mb-4 text-center">Cadastrar Aluno</h2>
+                    <form id="formCadastro" class="space-y-4">
+                        <input type="text" id="regNome" placeholder="Nome Completo" required class="w-full p-3 border rounded-xl outline-none">
+                        <input type="text" id="regId" placeholder="Matrícula" required class="w-full p-3 border rounded-xl outline-none">
+                        <button type="submit" class="w-full bg-blue-600 text-white py-3 rounded-xl font-bold">Cadastrar</button>
+                    </form>
+                </div>
+                <div class="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                    <h2 class="text-xl font-bold text-slate-800 mb-4">Lista Escolar</h2>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left">
+                            <thead>
+                                <tr class="text-slate-400 text-sm border-b">
+                                    <th class="pb-3 px-2">ID</th>
+                                    <th class="pb-3 px-2">Nome</th>
+                                    <th class="pb-3 text-right">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="listaAlunos"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Cantina -->
+        <section id="view-cantina" class="hidden">
+            <div class="flex justify-between items-center mb-6">
+                <h1 class="text-2xl font-bold text-slate-800">Operação Cantina</h1>
+                <button onclick="logout()" class="text-sm bg-slate-200 px-4 py-2 rounded-lg font-bold">Sair</button>
+            </div>
+            <div class="flex flex-col lg:flex-row gap-6">
+                <div class="lg:w-2/3 space-y-6">
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 text-center">
+                        <h2 class="text-lg font-semibold text-slate-800 mb-4">Scanner de Acesso</h2>
+                        <div id="reader-wrapper" class="bg-slate-50 rounded-2xl p-4 border-2 border-dashed border-slate-200 min-h-[300px]">
+                            <div id="reader"></div>
+                        </div>
+                        <div class="mt-4 flex gap-2">
+                            <input type="text" id="idInputManual" placeholder="ID Manual" class="flex-grow p-3 border rounded-xl outline-none">
+                            <button id="btnValidarManual" class="bg-slate-800 text-white px-6 rounded-xl font-bold">Validar</button>
+                        </div>
+                    </div>
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                        <h2 class="text-lg font-semibold text-slate-800 mb-4">Atividade Recente</h2>
+                        <div id="activityLog" class="space-y-2 text-sm text-slate-500 italic">Nenhuma atividade hoje.</div>
+                    </div>
+                </div>
+                <div class="lg:w-1/3">
+                    <div class="bg-blue-600 text-white p-8 rounded-3xl shadow-lg text-center">
+                        <p class="opacity-80">Total de Refeições</p>
+                        <h3 id="statTotal" class="text-6xl font-bold">0</h3>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Aluno -->
+        <section id="view-aluno">
+            <div class="grid lg:grid-cols-2 gap-8 items-start">
+                <div class="bg-white rounded-3xl shadow-xl overflow-hidden border border-slate-200">
+                    <div class="bg-blue-600 p-8 text-white text-center">
+                        <h2 class="text-xl font-bold">Área do Aluno</h2>
+                        <p class="text-blue-100 text-sm">Gere seu código de acesso</p>
+                    </div>
+                    <div class="p-8 space-y-6">
+                        <div class="flex gap-2">
+                            <input type="text" id="loginAlunoId" placeholder="Matrícula" class="flex-grow p-3 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500">
+                            <button onclick="consultarAluno()" class="bg-blue-600 text-white px-6 rounded-xl font-bold">Entrar</button>
+                        </div>
+                        <div id="areaResultadoAluno" class="hidden space-y-6 border-t pt-6 text-center animate-fade-in">
+                            <div>
+                                <p id="nomeAlunoDisplay" class="text-xl font-bold text-slate-800"></p>
+                                <p id="statusAlmoco" class="inline-block mt-2 px-3 py-1 rounded-full text-xs font-bold uppercase"></p>
+                            </div>
+                            <div id="qrcode" class="inline-block p-4 bg-white border-4 border-slate-50 rounded-2xl"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-3xl shadow-xl overflow-hidden border border-slate-200">
+                    <div class="bg-emerald-600 p-6 text-white flex items-center justify-between">
+                        <h2 class="text-lg font-bold uppercase tracking-wide">Cardápio da Semana</h2>
+                    </div>
+                    <div class="p-6 space-y-3" id="cardapio-container">
+                        <!-- Itens do cardápio gerados via JS -->
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Modais -->
+    <div id="modalOverlay" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-50 p-4">
+        <div id="modalContent" class="bg-white w-full max-w-sm rounded-3xl p-8 text-center shadow-2xl transition-all">
+            <div id="modalIcon" class="w-20 h-20 mx-auto mb-4 flex items-center justify-center rounded-full text-3xl"></div>
+            <h2 id="modalTitle" class="text-xl font-bold mb-2"></h2>
+            <p id="modalMessage" class="text-slate-500 mb-6"></p>
+            <button onclick="closeModal()" class="w-full bg-slate-800 text-white py-3 rounded-xl font-bold">Fechar</button>
+        </div>
+    </div>
+
+    <script>
+        const PASSWORDS = { direcao: "1234", cantina: "0123" };
+        let currentAuthenticatedTab = null;
+        let pendingTab = null;
+        let isProcessingScan = false;
+        let currentStudentId = null;
+
+        // Banco de dados local (será sincronizado com o Sheets se disponível)
+        let db = {
+            alunos: [
+                { id: "1010", nome: "Ana Silva", escolhas: {} },
+                { id: "2020", nome: "Bruno Costa", escolhas: {} }
+            ],
+            almocosHoje: new Set()
+        };
+
+        const cardapioSemana = [
+            { id: "Segunda", dia: "Segunda", menu: "Arroz, feijão, carne de frango" },
+            { id: "Terça", dia: "Terça", menu: "Arroz, feijão, carne de boi" },
+            { id: "Quarta", dia: "Quarta", menu: "Arroz, carne de porco e salada de alface" },
+            { id: "Quinta", dia: "Quinta", menu: "Maria isabel" },
+            { id: "Sexta", dia: "Sexta", menu: "Arroz, feijão, carne de porco" }
+        ];
+
+        // --- INTEGRAÇÃO GOOGLE SHEETS ---
+        // Verifica se o código está rodando dentro de um Google App Script
+        const isSheetsEnvironment = typeof google !== 'undefined' && google.script && google.script.run;
+
+        function syncWithSheets() {
+            if (isSheetsEnvironment) {
+                // Exemplo: carregar lista de alunos da planilha ao iniciar
+                // google.script.run.withSuccessHandler(data => { db.alunos = data; atualizarTabelaDirecao(); }).getAlunos();
+            }
+        }
+
+        function attemptAccess(tab) {
+            if (currentAuthenticatedTab === tab) switchTab(tab);
+            else { pendingTab = tab; showAuthScreen(tab); }
+        }
+
+        function showAuthScreen(tab) {
+            document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
+            document.getElementById('view-auth').classList.remove('hidden');
+            document.getElementById('auth-title').innerText = tab === 'direcao' ? 'Acesso Direção' : 'Acesso Cantina';
+            document.getElementById('authPassword').value = "";
+        }
+
+        function verifyPassword() {
+            if (document.getElementById('authPassword').value === PASSWORDS[pendingTab]) {
+                currentAuthenticatedTab = pendingTab;
+                switchTab(pendingTab);
+            } else alert("Senha incorreta!");
+        }
+
+        function logout() {
+            currentAuthenticatedTab = null;
+            stopScanner(() => switchTab('aluno'));
+        }
+
+        function switchTab(tab) {
+            document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
+            document.querySelectorAll('nav button').forEach(b => b.classList.remove('tab-active'));
+            document.getElementById(`view-${tab}`).classList.remove('hidden');
+            document.getElementById(`tab-${tab}`).classList.add('tab-active');
+            
+            if (tab === 'cantina') {
+                setTimeout(startScanner, 300);
+            } else {
+                stopScanner();
+            }
+            
+            if (tab === 'aluno') renderCardapio();
+        }
+
+        let html5QrcodeScanner = null;
+        
+        async function startScanner() {
+            const readerElement = document.getElementById("reader");
+            if (!readerElement) return;
+
+            if (html5QrcodeScanner) {
+                try {
+                    await html5QrcodeScanner.clear();
+                } catch (e) {
+                    console.warn("Erro ao limpar scanner anterior:", e);
+                }
+            }
+
+            html5QrcodeScanner = new Html5QrcodeScanner("reader", { 
+                fps: 10, 
+                qrbox: { width: 250, height: 250 },
+                aspectRatio: 1.0
+            });
+            
+            html5QrcodeScanner.render(onScanSuccess, onScanFailure);
+        }
+
+        function onScanFailure(error) { /* Silencioso */ }
+
+        async function stopScanner(callback) {
+            if (html5QrcodeScanner) {
+                try {
+                    await html5QrcodeScanner.clear();
+                    html5QrcodeScanner = null;
+                } catch (e) {
+                    console.error("Erro ao parar scanner:", e);
+                }
+            }
+            if (callback) callback();
+        }
+
+        function onScanSuccess(decodedText) {
+            if (isProcessingScan) return;
+            isProcessingScan = true;
+            processCheckIn(decodedText);
+            setTimeout(() => { isProcessingScan = false; }, 3000);
+        }
+
+        function getDiaSemanaAtual() {
+            const dias = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+            return dias[new Date().getDay()];
+        }
+
+        function processCheckIn(id) {
+            const aluno = db.alunos.find(a => String(a.id) === String(id).trim());
+            const diaHoje = getDiaSemanaAtual();
+
+            if (!aluno) {
+                showModal("Não Encontrado", "Matrícula não cadastrada.", "bg-amber-100 text-amber-600", "fas fa-user-slash");
+                return;
+            }
+
+            if (db.almocosHoje.has(id)) {
+                showModal("Acesso Negado", `${aluno.nome} já almoçou hoje.`, "bg-red-100 text-red-600", "fas fa-hand-paper");
+                return;
+            }
+
+            if (aluno.escolhas && aluno.escolhas[diaHoje] === false) {
+                showModal("Acesso Negado", "Acesso negado, o aluno disse que não vai almoçar hoje.", "bg-orange-100 text-orange-600", "fas fa-ban");
+                return;
+            }
+
+            // Registrar localmente
+            db.almocosHoje.add(id);
+            document.getElementById('statTotal').innerText = db.almocosHoje.size;
+            logActivity(aluno.nome, id);
+
+            // Registrar no Sheets
+            if (isSheetsEnvironment) {
+                google.script.run.withSuccessHandler(() => console.log("Salvo no Sheets"))
+                    .registrarAlmoco(id);
+            }
+
+            showModal("Autorizado", `Bom almoço, ${aluno.nome}!`, "bg-green-100 text-green-600", "fas fa-check-circle");
+        }
+
+        function renderCardapio() {
+            const container = document.getElementById('cardapio-container');
+            if (!container) return;
+            
+            container.innerHTML = cardapioSemana.map(item => {
+                const aluno = db.alunos.find(a => a.id === currentStudentId);
+                const escolha = (aluno && aluno.escolhas) ? aluno.escolhas[item.dia] : null;
+                
+                const isVou = escolha === true;
+                const isNao = escolha === false;
+
+                return `
+                <div class="day-item flex flex-col md:flex-row md:items-center justify-between p-4 rounded-2xl border border-slate-100 bg-white gap-3">
+                    <div>
+                        <div class="font-bold text-slate-800 text-xs">${item.dia.toUpperCase()}</div>
+                        <div class="text-sm text-slate-600">${item.menu}</div>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="marcarEscolha('${item.dia}', true)" class="text-xs px-3 py-2 rounded-xl font-bold transition ${isVou ? 'bg-emerald-600 text-white' : 'bg-emerald-50 text-emerald-600'}">Vou comer</button>
+                        <button onclick="marcarEscolha('${item.dia}', false)" class="text-xs px-3 py-2 rounded-xl font-bold transition ${isNao ? 'bg-red-600 text-white' : 'bg-slate-100 text-slate-500'}">Não vou</button>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        function marcarEscolha(dia, status) {
+            if (!currentStudentId) {
+                alert("Por favor, informe sua matrícula primeiro!");
+                return;
+            }
+            const aluno = db.alunos.find(a => a.id === currentStudentId);
+            if (aluno) {
+                if (!aluno.escolhas) aluno.escolhas = {};
+                aluno.escolhas[dia] = status;
+                
+                // Salvar localmente
+                renderCardapio();
+
+                // Salvar no Sheets
+                if (isSheetsEnvironment) {
+                    google.script.run.salvarEscolha(currentStudentId, dia, status ? "Vou" : "Não vou");
+                }
+
+                const msg = status ? `Confirmado para ${dia}: Vou almoçar!` : `Confirmado para ${dia}: Não vou almoçar.`;
+                showModal("Escolha Salva", msg, "bg-blue-100 text-blue-600", "fas fa-calendar-check");
+            }
+        }
+
+        function consultarAluno() {
+            const id = document.getElementById('loginAlunoId').value.trim();
+            const aluno = db.alunos.find(a => String(a.id) === id);
+            if (!aluno) return alert("Matrícula não encontrada.");
+
+            currentStudentId = id;
+            document.getElementById('areaResultadoAluno').classList.remove('hidden');
+            document.getElementById('nomeAlunoDisplay').innerText = aluno.nome;
+            
+            const statusEl = document.getElementById('statusAlmoco');
+            if (db.almocosHoje.has(id)) {
+                statusEl.innerText = "Check-in realizado hoje";
+                statusEl.className = "inline-block mt-2 px-3 py-1 rounded-full text-xs font-bold uppercase bg-red-100 text-red-600";
+            } else {
+                statusEl.innerText = "Check-in Pendente";
+                statusEl.className = "inline-block mt-2 px-3 py-1 rounded-full text-xs font-bold uppercase bg-green-100 text-green-600";
+            }
+
+            const qrTarget = document.getElementById("qrcode");
+            qrTarget.innerHTML = "";
+            new QRCode(qrTarget, { text: id, width: 140, height: 140 });
+            renderCardapio();
+        }
+
+        document.getElementById('formCadastro').onsubmit = (e) => {
+            e.preventDefault();
+            const id = document.getElementById('regId').value;
+            const nome = document.getElementById('regNome').value;
+            if (db.alunos.find(a => a.id === id)) return alert("ID já existe");
+            
+            db.alunos.push({ id, nome, escolhas: {} });
+            
+            if (isSheetsEnvironment) {
+                // google.script.run.cadastrarNovoAluno(id, nome);
+            }
+            
+            atualizarTabelaDirecao();
+            e.target.reset();
+        };
+
+        function atualizarTabelaDirecao() {
+            const tbody = document.getElementById('listaAlunos');
+            if (!tbody) return;
+            tbody.innerHTML = db.alunos.map(a => `
+                <tr class="border-t">
+                    <td class="py-3 px-2 font-mono text-sm">${a.id}</td>
+                    <td class="py-3 px-2 font-semibold text-slate-700">${a.nome}</td>
+                    <td class="py-3 text-right">
+                        <button onclick="removerAluno('${a.id}')" class="text-red-400 p-2"><i class="fas fa-trash"></i></button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function removerAluno(id) {
+            db.alunos = db.alunos.filter(a => a.id !== id);
+            atualizarTabelaDirecao();
+        }
+
+        function logActivity(nome, id) {
+            const log = document.getElementById('activityLog');
+            if (!log) return;
+            if (log.innerText.includes("Nenhuma")) log.innerHTML = "";
+            const item = document.createElement('div');
+            item.className = "flex justify-between items-center p-3 bg-white border rounded-xl mb-2 animate-fade-in";
+            item.innerHTML = `<span>${nome}</span> <span class="text-blue-500 font-mono text-xs">${id}</span>`;
+            log.prepend(item);
+        }
+
+        function showModal(title, message, colorClass, iconClass) {
+            const modalIcon = document.getElementById('modalIcon');
+            if (modalIcon) {
+                modalIcon.className = `w-20 h-20 mx-auto mb-4 flex items-center justify-center rounded-full text-3xl ${colorClass}`;
+                modalIcon.innerHTML = `<i class="${iconClass}"></i>`;
+            }
+            const modalTitle = document.getElementById('modalTitle');
+            if (modalTitle) modalTitle.innerText = title;
+            const modalMessage = document.getElementById('modalMessage');
+            if (modalMessage) modalMessage.innerText = message;
+            
+            const overlay = document.getElementById('modalOverlay');
+            if (overlay) overlay.classList.replace('hidden', 'flex');
+        }
+
+        function closeModal() {
+            const overlay = document.getElementById('modalOverlay');
+            if (overlay) overlay.classList.replace('flex', 'hidden');
+        }
+
+        document.getElementById('btnValidarManual').onclick = () => {
+            const val = document.getElementById('idInputManual').value;
+            if(val) processCheckIn(val);
+        };
+
+        window.onload = () => {
+            atualizarTabelaDirecao();
+            renderCardapio();
+            syncWithSheets();
+        };
+    </script>
+</body>
+</html>
